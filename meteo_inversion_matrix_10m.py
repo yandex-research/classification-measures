@@ -181,7 +181,7 @@ seen_dates = set()
 seen_fcs = list(range(12))
 seen_exps = set()
 
-for fn in glob('data/meteo/prod*.tsv'):
+for fn in glob('data/meteo/*.tsv'):
     for idx, line in enumerate(open(fn, encoding='utf-8')):
         if not idx: continue
         exp_group, utc_date, tn, tp, fn, fp = line.strip().split('\t')
