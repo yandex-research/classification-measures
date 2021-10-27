@@ -1,11 +1,20 @@
 from glob import glob
 from collections import defaultdict, Counter
+import sys
 import math
 import numpy as np
 import random
 
 random.seed(42)
 EPS  = 1e-5
+
+if len(sys.argv)<2 or sys.argv[1] not in ('10m', '2h'):
+    use_fcs = list(range(12))
+elif sys.argv[1] == '10m':
+    use_fcs = (0,)
+else:
+    use_fcs = (11,)
+
 
 def alt_mcc_bin(tp, fn, fp, tn):
     n = tp+ fn+ fp+ tn
@@ -93,8 +102,7 @@ def alt_confent_bin4(tp, fn, fp, tn):
         sum1 += sum2*(ts[c1]+ps[c1])/(2.*n)
     return -sum1
 
-
-def alt_sns_bin(tp, fn, fp, tn):
+def alt_sba_bin(tp, fn, fp, tn):
     n = tp+ fn+ fp+ tn
     c2i = (0,1)
     m = len(c2i)
@@ -147,23 +155,21 @@ def alt_CD(tp, fn, fp, tn):
     return -np.arccos(alt_mcc_bin(tp, fn, fp, tn))
 
 
-metrics_impl = [
-('f1', lambda tp, fn, fp, tn: (2*tp)/(2*tp+fp+fn)),
-('jaccard', lambda tp, fn, fp, tn: tp/(tp+fp+fn)),
-('ba', lambda tp, fn, fp, tn: ((tp)/(tp+fn)+(tn)/(tn+fp))/2.),
-('acc', lambda tp, fn, fp, tn: (tp+tn)/(tp+tn+fp+fn)),
-('iba', lambda tp, fp, fn, tn: ((tp)/(tp+fn)+(tn)/(tn+fp))/2.),
+metrics_impl = dict([
+    ('f1', lambda tp, fn, fp, tn: (2*tp)/(2*tp+fp+fn)),
+    ('jaccard', lambda tp, fn, fp, tn: tp/(tp+fp+fn)),
+    ('ba', lambda tp, fn, fp, tn: ((tp)/(tp+fn)+(tn)/(tn+fp))/2.),
+    ('acc', lambda tp, fn, fp, tn: (tp+tn)/(tp+tn+fp+fn)),
+    ('iba', lambda tp, fp, fn, tn: ((tp)/(tp+fn)+(tn)/(tn+fp))/2.),
 
-('gm1', alt_gm1_bin),
-('ce', lambda tp, fn, fp, tn:-alt_confent_bin4(tp, fn, fp, tn)),
-('sba', alt_sns_bin),
+    ('gm1', alt_gm1_bin),
+    ('ce', lambda tp, fn, fp, tn:-alt_confent_bin4(tp, fn, fp, tn)),
+    ('sba', alt_sba_bin),
 
-('kappa', alt_cohen_bin4),
-('cc', alt_mcc_bin),
-('cd',alt_CD),
-]
-
-metrics_impl = dict(metrics_impl)
+    ('kappa', alt_cohen_bin4),
+    ('cc', alt_mcc_bin),
+    ('cd',alt_CD),
+])
 
 _cache = dict()
 def get_bin_indices(tp, fn, fp, tn):
@@ -178,9 +184,6 @@ found_examples = defaultdict(list)
 discr_examples = defaultdict(list)
 sampled_metrics = defaultdict(dict)
 
-seen_dates = set()
-seen_fcs = list(range(12))
-seen_exps = set()
 
 for fn in glob('data/meteo/*.tsv'):
     for idx, line in enumerate(open(fn, encoding='utf-8')):
@@ -191,10 +194,7 @@ for fn in glob('data/meteo/*.tsv'):
         fn = list(map(int,fn.split(',')))
         fp = list(map(int,fp.split(',')))
 
-        seen_dates.add( utc_date )
-        seen_exps.add( exp_group )
-
-        for fc in (11,): 
+        for fc in use_fcs: 
             sampled_metrics[(utc_date, fc)][exp_group] = get_bin_indices(tp[fc], fn[fc], fp[fc], tn[fc])
 
 
@@ -203,7 +203,6 @@ total = set()
 for ds in sampled_metrics:
     for i, (a1, m1) in enumerate(sampled_metrics[ds].items()):
         for j, (a2, m2) in enumerate(sampled_metrics[ds].items()):
-            markup = ()
             if i<j:
                 left_winners = []
                 right_winners = []
@@ -218,7 +217,7 @@ for ds in sampled_metrics:
                     if abs(m1[m]-m2[m])<=EPS:
                         draw_cases.append( (m,i,j) )
 
-                handle = frozenset((tuple(markup), (ds,a1), (ds,a2)))
+                handle = frozenset((ds,a1,a2))
                 if left_winners and right_winners:
                     for r1 in left_winners:
                         for r2 in right_winners:
